@@ -1,4 +1,5 @@
-struct GradientCache{CacheType1,CacheType2,CacheType3,CacheType4,fdtype,returntype,inplace}
+struct GradientCache{
+    CacheType1, CacheType2, CacheType3, CacheType4, fdtype, returntype, inplace}
     fx::CacheType1
     c1::CacheType2
     c2::CacheType3
@@ -16,12 +17,11 @@ end
 Allocating Cache Constructor
 """
 function GradientCache(
-    df,
-    x,
-    fdtype=Val(:central),
-    returntype=eltype(df),
-    inplace=Val(true))
-
+        df,
+        x,
+        fdtype = Val(:central),
+        returntype = eltype(df),
+        inplace = Val(true))
     fdtype isa Type && (fdtype = fdtype())
     inplace isa Type && (inplace = inplace())
     if typeof(x) <: AbstractArray # the vector->scalar case
@@ -59,9 +59,8 @@ function GradientCache(
         _c3 = x
     end
 
-    GradientCache{Nothing,typeof(_c1),typeof(_c2),typeof(_c3),fdtype,
-        returntype,inplace}(nothing, _c1, _c2, _c3)
-
+    GradientCache{Nothing, typeof(_c1), typeof(_c2), typeof(_c3), fdtype,
+        returntype, inplace}(nothing, _c1, _c2, _c3)
 end
 
 """
@@ -86,7 +85,7 @@ Non-Allocating Cache Constructor
 # Output 
 The output is a [`GradientCache`](@ref) struct.
 
-```julia
+```julia-repl
 julia> x = [1.0, 3.0]
 2-element Vector{Float64}:
  1.0
@@ -103,44 +102,81 @@ GradientCache{Float64, Vector{Float64}, Vector{Float64}, Vector{Float64}, Val{:c
 ```
 """
 function GradientCache(
-    fx::Fx,# match order in struct for Setfield
-    c1::T,
-    c2::T,
-    c3::T,
-    fdtype=Val(:central),
-    returntype=eltype(fx),
-    inplace=Val(true)) where {T,Fx} # Val(false) isn't so important for vector -> scalar, it gets ignored in that case anyway.
-    GradientCache{Fx,T,T,T,fdtype,returntype,inplace}(fx, c1, c2, c3)
+        fx::Fx,# match order in struct for Setfield
+        c1::T,
+        c2::T,
+        c3::T,
+        fdtype = Val(:central),
+        returntype = eltype(fx),
+        inplace = Val(true)) where {T, Fx} # Val(false) isn't so important for vector -> scalar, it gets ignored in that case anyway.
+    GradientCache{Fx, T, T, T, fdtype, returntype, inplace}(fx, c1, c2, c3)
 end
 
 """
     FiniteDiff.finite_difference_gradient(
         f,
         x,
-        fdtype::Type{T1}=Val{:central},
-        returntype::Type{T2}=eltype(x),
-        inplace::Type{Val{T3}}=Val{true};
-        relstep=default_relstep(fdtype, eltype(x)),
-        absstep=relstep,
-        dir=true)
+        fdtype     :: Type{T1}      = Val{:central},
+        returntype :: Type{T2}      = eltype(x),
+        inplace    :: Type{Val{T3}} = Val{true};
+        relstep = default_relstep(fdtype, eltype(x)),
+        absstep = relstep,
+        dir     = true)
 
-Gradients are either a vector->scalar map `f(x)`, or a scalar->vector map `f(fx,x)` if `inplace=Val{true}` and `fx=f(x)` if `inplace=Val{false}`.
+Compute the gradient of function `f` at point `x` using finite differences.
 
-Cache-less.
+This is the cache-less version that allocates temporary arrays internally.
+Supports both vector→scalar maps `f(x) → scalar` and scalar→vector maps depending
+on the `inplace` parameter and function signature.
+
+# Arguments
+- `f`: Function to differentiate
+  - If `typeof(x) <: AbstractArray`: `f(x)` should return a scalar (vector→scalar gradient)
+  - If `typeof(x) <: Number` and `inplace=Val(true)`: `f(fx, x)` modifies `fx` in-place (scalar→vector gradient)
+  - If `typeof(x) <: Number` and `inplace=Val(false)`: `f(x)` returns a vector (scalar→vector gradient)
+- `x`: Point at which to evaluate the gradient (vector or scalar)
+- `fdtype::Type{T1}=Val{:central}`: Finite difference method (`:forward`, `:central`, `:complex`)
+- `returntype::Type{T2}=eltype(x)`: Element type of gradient components
+- `inplace::Type{Val{T3}}=Val{true}`: Whether to use in-place function evaluation
+
+# Keyword Arguments
+- `relstep`: Relative step size (default: method-dependent optimal value)
+- `absstep=relstep`: Absolute step size fallback
+- `dir=true`: Direction for step size (typically ±1)
+
+# Returns
+- Gradient vector `∇f` where `∇f[i] = ∂f/∂x[i]`
+
+# Examples
+```julia
+# Vector→scalar gradient
+f(x) = x[1]^2 + x[2]^2
+x = [1.0, 2.0]
+grad = finite_difference_gradient(f, x)  # [2.0, 4.0]
+
+# Scalar→vector gradient (out-of-place)
+g(t) = [t^2, t^3]
+t = 2.0
+grad = finite_difference_gradient(g, t, Val(:central), eltype(t), Val(false))
+```
+
+# Notes
+- Forward differences: `O(n)` function evaluations, `O(h)` accuracy
+- Central differences: `O(2n)` function evaluations, `O(h²)` accuracy
+- Complex step: `O(n)` function evaluations, machine precision accuracy
 """
 function finite_difference_gradient(
-    f,
-    x,
-    fdtype=Val(:central),
-    returntype=eltype(x),
-    inplace=Val(true),
-    fx=nothing,
-    c1=nothing,
-    c2=nothing;
-    relstep=default_relstep(fdtype, eltype(x)),
-    absstep=relstep,
-    dir=true)
-
+        f,
+        x,
+        fdtype = Val(:central),
+        returntype = eltype(x),
+        inplace = Val(true),
+        fx = nothing,
+        c1 = nothing,
+        c2 = nothing;
+        relstep = default_relstep(fdtype, eltype(x)),
+        absstep = relstep,
+        dir = true)
     inplace isa Type && (inplace = inplace())
     if typeof(x) <: AbstractArray
         df = zero(returntype) .* x
@@ -162,7 +198,8 @@ function finite_difference_gradient(
         end
     end
     cache = GradientCache(df, x, fdtype, returntype, inplace)
-    finite_difference_gradient!(df, f, x, cache, relstep=relstep, absstep=absstep, dir=dir)
+    finite_difference_gradient!(
+        df, f, x, cache, relstep = relstep, absstep = absstep, dir = dir)
 end
 
 """
@@ -181,63 +218,96 @@ Gradients are either a vector->scalar map `f(x)`, or a scalar->vector map `f(fx,
 Cache-less.
 """
 function finite_difference_gradient!(
-    df,
-    f,
-    x,
-    fdtype=Val(:central),
-    returntype=eltype(df),
-    inplace=Val(true),
-    fx=nothing,
-    c1=nothing,
-    c2=nothing;
-    relstep=default_relstep(fdtype, eltype(x)),
-    absstep=relstep)
-
+        df,
+        f,
+        x,
+        fdtype = Val(:central),
+        returntype = eltype(df),
+        inplace = Val(true),
+        fx = nothing,
+        c1 = nothing,
+        c2 = nothing;
+        relstep = default_relstep(fdtype, eltype(x)),
+        absstep = relstep)
     cache = GradientCache(df, x, fdtype, returntype, inplace)
-    finite_difference_gradient!(df, f, x, cache, relstep=relstep, absstep=absstep)
+    finite_difference_gradient!(df, f, x, cache, relstep = relstep, absstep = absstep)
 end
 
 """
     FiniteDiff.finite_difference_gradient!(
-        df::AbstractArray{<:Number},
+        df    :: AbstractArray{<:Number},
         f,
-        x::AbstractArray{<:Number},
-        cache::GradientCache;
-        relstep=default_relstep(fdtype, eltype(x)),
-        absstep=relstep
-        dir=true)
+        x     :: AbstractArray{<:Number},
+        cache :: GradientCache;
+        relstep = default_relstep(fdtype, eltype(x)),
+        absstep = relstep
+        dir     = true)
 
 Gradients are either a vector->scalar map `f(x)`, or a scalar->vector map `f(fx,x)` if `inplace=Val{true}` and `fx=f(x)` if `inplace=Val{false}`.
 
 Cached.
 """
 function finite_difference_gradient(
-    f,
-    x,
-    cache::GradientCache{T1,T2,T3,T4,fdtype,returntype,inplace};
-    relstep=default_relstep(fdtype, eltype(x)),
-    absstep=relstep,
-    dir=true) where {T1,T2,T3,T4,fdtype,returntype,inplace}
-
+        f,
+        x,
+        cache::GradientCache{T1, T2, T3, T4, fdtype, returntype, inplace};
+        relstep = default_relstep(fdtype, eltype(x)),
+        absstep = relstep,
+        dir = true) where {T1, T2, T3, T4, fdtype, returntype, inplace}
     if typeof(x) <: AbstractArray
         df = zero(returntype) .* x
+        finite_difference_gradient!(
+            df, f, x, cache, relstep = relstep, absstep = absstep, dir = dir)
+        df
     else
-        df = zero(cache.c1)
+        # Scalar x: compute out-of-place to support immutable output types
+        # (e.g. ArrayPartition{SVector} from SecondOrderODEProblem).
+        _scalar_gradient_oop(f, x, cache, fdtype, returntype, inplace;
+            relstep = relstep, absstep = absstep, dir = dir)
     end
-    finite_difference_gradient!(df, f, x, cache, relstep=relstep, absstep=absstep, dir=dir)
-    df
+end
+
+# Out-of-place scalar→vector gradient that never mutates the result,
+# so it works even when f returns immutable arrays (SVector, etc.).
+function _scalar_gradient_oop(
+        f, x::Number, cache, fdtype, returntype, inplace;
+        relstep, absstep, dir)
+    fx, c1, c2 = cache.fx, cache.c1, cache.c2
+
+    if fdtype == Val(:forward)
+        epsilon = compute_epsilon(Val(:forward), x, relstep, absstep, dir)
+        _c1 = inplace == Val(true) ? (f(c1, x + epsilon); c1) : f(x + epsilon)
+        if typeof(fx) != Nothing
+            @. (_c1 - fx) / epsilon
+        else
+            _c2 = inplace == Val(true) ? (f(c2, x); c2) : f(x)
+            @. (_c1 - _c2) / epsilon
+        end
+    elseif fdtype == Val(:central)
+        epsilon = compute_epsilon(Val(:central), x, relstep, absstep, dir)
+        _c1 = inplace == Val(true) ? (f(c1, x + epsilon); c1) : f(x + epsilon)
+        _c2 = inplace == Val(true) ? (f(c2, x - epsilon); c2) : f(x - epsilon)
+        @. (_c1 - _c2) / (2 * epsilon)
+    elseif fdtype == Val(:complex) && returntype <: Real
+        epsilon_complex = eps(real(eltype(x)))
+        _c1 = inplace == Val(true) ?
+              (f(c1, x + im * epsilon_complex); c1) : f(x + im * epsilon_complex)
+        @. imag(_c1) / epsilon_complex
+    else
+        fdtype_error(returntype)
+    end
 end
 
 # vector of derivatives of a vector->scalar map by each component of a vector x
 # this ignores the value of "inplace", because it doesn't make much sense
 function finite_difference_gradient!(
-    df,
-    f,
-    x,
-    cache::GradientCache{T1,T2,T3,T4,fdtype,returntype,inplace};
-    relstep=default_relstep(fdtype, eltype(x)),
-    absstep=relstep,
-    dir=true) where {T1,T2,T3,T4,fdtype,returntype,inplace}
+        df,
+        f,
+        x,
+        cache::GradientCache{T1, T2, T3, T4, fdtype, returntype, inplace};
+        relstep = default_relstep(fdtype, eltype(x)),
+        absstep = relstep,
+        dir = true) where {T1, T2, T3, T4, fdtype, returntype, inplace}
 
     # NOTE: in this case epsilon is a vector, we need two arrays for epsilon and x1
     # c1 denotes x1, c2 is epsilon
@@ -247,11 +317,12 @@ function finite_difference_gradient!(
     end
     copyto!(c1, x)
     if fdtype == Val(:forward)
-        @inbounds for i ∈ eachindex(x)
+        @inbounds for i in eachindex(x)
             if ArrayInterface.fast_scalar_indexing(c2)
                 epsilon = ArrayInterface.allowed_getindex(c2, i) * dir
             else
-                epsilon = compute_epsilon(fdtype, one(eltype(x)), relstep, absstep, dir) * dir
+                epsilon = compute_epsilon(fdtype, one(eltype(x)), relstep, absstep, dir) *
+                          dir
             end
             c1_old = ArrayInterface.allowed_getindex(c1, i)
             ArrayInterface.allowed_setindex!(c1, c1_old + epsilon, i)
@@ -278,11 +349,12 @@ function finite_difference_gradient!(
         end
     elseif fdtype == Val(:central)
         copyto!(c3, x)
-        @inbounds for i ∈ eachindex(x)
+        @inbounds for i in eachindex(x)
             if ArrayInterface.fast_scalar_indexing(c2)
                 epsilon = ArrayInterface.allowed_getindex(c2, i) * dir
             else
-                epsilon = compute_epsilon(fdtype, one(eltype(x)), relstep, absstep, dir) * dir
+                epsilon = compute_epsilon(fdtype, one(eltype(x)), relstep, absstep, dir) *
+                          dir
             end
             c1_old = ArrayInterface.allowed_getindex(c1, i)
             ArrayInterface.allowed_setindex!(c1, c1_old + epsilon, i)
@@ -303,7 +375,7 @@ function finite_difference_gradient!(
     elseif fdtype == Val(:complex) && returntype <: Real
         # we use c1 here to avoid typing issues with x
         epsilon_complex = eps(real(eltype(x)))
-        @inbounds for i ∈ eachindex(x)
+        @inbounds for i in eachindex(x)
             c1_old = ArrayInterface.allowed_getindex(c1, i)
             ArrayInterface.allowed_setindex!(c1, c1_old + im * epsilon_complex, i)
             ArrayInterface.allowed_setindex!(df, imag(f(c1)) / epsilon_complex, i)
@@ -316,13 +388,13 @@ function finite_difference_gradient!(
 end
 
 function finite_difference_gradient!(
-    df::StridedVector{<:Number},
-    f,
-    x::StridedVector{<:Number},
-    cache::GradientCache{T1,T2,T3,T4,fdtype,returntype,inplace};
-    relstep=default_relstep(fdtype, eltype(x)),
-    absstep=relstep,
-    dir=true) where {T1,T2,T3,T4,fdtype,returntype,inplace}
+        df::StridedVector{<:Number},
+        f,
+        x::StridedVector{<:Number},
+        cache::GradientCache{T1, T2, T3, T4, fdtype, returntype, inplace};
+        relstep = default_relstep(fdtype, eltype(x)),
+        absstep = relstep,
+        dir = true) where {T1, T2, T3, T4, fdtype, returntype, inplace}
 
     # c1 is x1 if we need a complex copy of x, otherwise Nothing
     # c2 is Nothing
@@ -334,44 +406,30 @@ function finite_difference_gradient!(
     end
     copyto!(c3, x)
     if fdtype == Val(:forward)
-        for i ∈ eachindex(x)
+        fx0 = fx !== nothing ? fx : f(x)
+        for i in eachindex(x)
             epsilon = compute_epsilon(fdtype, x[i], relstep, absstep, dir)
             x_old = x[i]
-            if typeof(fx) != Nothing
-                c3[i] += epsilon
-                dfi = (f(c3) - fx) / epsilon
-                c3[i] = x_old
-            else
-                fx0 = f(x)
-                c3[i] += epsilon
-                dfi = (f(c3) - fx0) / epsilon
-                c3[i] = x_old
-            end
+            c3[i] += epsilon
+            dfi = (f(c3) - fx0) / epsilon
+            c3[i] = x_old
 
             df[i] = real(dfi)
             if eltype(df) <: Complex
                 if eltype(x) <: Complex
                     c3[i] += im * epsilon
-                    if typeof(fx) != Nothing
-                        dfi = (f(c3) - fx) / (im * epsilon)
-                    else
-                        dfi = (f(c3) - fx0) / (im * epsilon)
-                    end
+                    dfi = (f(c3) - fx0) / (im * epsilon)
                     c3[i] = x_old
                 else
                     c1[i] += im * epsilon
-                    if typeof(fx) != Nothing
-                        dfi = (f(c1) - fx) / (im * epsilon)
-                    else
-                        dfi = (f(c1) - fx0) / (im * epsilon)
-                    end
+                    dfi = (f(c1) - fx0) / (im * epsilon)
                     c1[i] = x_old
                 end
                 df[i] -= im * imag(dfi)
             end
         end
     elseif fdtype == Val(:central)
-        @inbounds for i ∈ eachindex(x)
+        @inbounds for i in eachindex(x)
             epsilon = compute_epsilon(fdtype, x[i], relstep, absstep, dir)
             x_old = x[i]
             c3[i] += epsilon
@@ -397,11 +455,12 @@ function finite_difference_gradient!(
                 df[i] -= im * imag(dfi / (2 * im * epsilon))
             end
         end
-    elseif fdtype == Val(:complex) && returntype <: Real && eltype(df) <: Real && eltype(x) <: Real
+    elseif fdtype == Val(:complex) && returntype <: Real && eltype(df) <: Real &&
+           eltype(x) <: Real
         copyto!(c1, x)
         epsilon_complex = eps(real(eltype(x)))
         # we use c1 here to avoid typing issues with x
-        @inbounds for i ∈ eachindex(x)
+        @inbounds for i in eachindex(x)
             c1_old = c1[i]
             c1[i] += im * epsilon_complex
             df[i] = imag(f(c1)) / epsilon_complex
@@ -416,13 +475,13 @@ end
 # vector of derivatives of a scalar->vector map
 # this is effectively a vector of partial derivatives, but we still call it a gradient
 function finite_difference_gradient!(
-    df,
-    f,
-    x::Number,
-    cache::GradientCache{T1,T2,T3,T4,fdtype,returntype,inplace};
-    relstep=default_relstep(fdtype, eltype(x)),
-    absstep=relstep,
-    dir=true) where {T1,T2,T3,T4,fdtype,returntype,inplace}
+        df,
+        f,
+        x::Number,
+        cache::GradientCache{T1, T2, T3, T4, fdtype, returntype, inplace};
+        relstep = default_relstep(fdtype, eltype(x)),
+        absstep = relstep,
+        dir = true) where {T1, T2, T3, T4, fdtype, returntype, inplace}
 
     # NOTE: in this case epsilon is a scalar, we need two arrays for fx1 and fx2
     # c1 denotes fx1, c2 is fx2, sizes guaranteed by the cache constructor

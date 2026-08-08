@@ -14,9 +14,12 @@ end
 @time begin
 
 if GROUP == "All" || GROUP == "Core"
+  @time @safetestset "Public API Tests" begin include("public_api_tests.jl") end
   @time @safetestset "FiniteDiff Standard Tests" begin include("finitedifftests.jl") end
   @time @safetestset "Color Differentiation Tests" begin include("coloring_tests.jl") end
+  @time @safetestset "JVP Accuracy Tests" begin include("jvp_accuracy_tests.jl") end
   @time @safetestset "Out of Place Tests" begin include("out_of_place_tests.jl") end
+  @time @safetestset "Cache Reuse Safety Tests" begin include("cache_reuse_tests.jl") end
 end
 
 if GROUP == "All" || GROUP == "Downstream"
@@ -24,7 +27,6 @@ if GROUP == "All" || GROUP == "Downstream"
   @time @safetestset "ODEs" begin
     import OrdinaryDiffEq
     @time @safetestset "OrdinaryDiffEq Tridiagonal" begin include("downstream/ordinarydiffeq_tridiagonal_solve.jl") end
-    include(joinpath(dirname(pathof(OrdinaryDiffEq)), "..", "test/interface/sparsediff_tests.jl"))
   end
 end
 

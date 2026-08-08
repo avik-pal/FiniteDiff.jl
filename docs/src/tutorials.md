@@ -10,21 +10,21 @@ using FiniteDiff, StaticArrays
 
 fcalls = 0
 function f(dx,x) # in-place
-  global fcalls += 1
-  for i in 2:length(x)-1
-    dx[i] = x[i-1] - 2x[i] + x[i+1]
-  end
-  dx[1] = -2x[1] + x[2]
-  dx[end] = x[end-1] - 2x[end]
-  nothing
+    global fcalls += 1
+    for i in 2:length(x)-1
+        dx[i] = x[i-1] - 2x[i] + x[i+1]
+    end
+    dx[1] = -2x[1] + x[2]
+    dx[end] = x[end-1] - 2x[end]
+    nothing
 end
 
 const N = 10
 handleleft(x,i) = i==1 ? zero(eltype(x)) : x[i-1]
 handleright(x,i) = i==length(x) ? zero(eltype(x)) : x[i+1]
 function g(x) # out-of-place
-  global fcalls += 1
-  @SVector [handleleft(x,i) - 2x[i] + handleright(x,i) for i in 1:N]
+    global fcalls += 1
+    @SVector [handleleft(x,i) - 2x[i] + handleright(x,i) for i in 1:N]
 end
 ```
 
@@ -37,7 +37,7 @@ x = @SVector rand(N)
 FiniteDiff.finite_difference_jacobian(g,x)
 
 #=
-10×10 SArray{Tuple{10,10},Float64,2,100} with indices SOneTo(10)×SOneTo(10):
+10×10 SMatrix{10, 10, Float64, 100} with indices SOneTo(10)×SOneTo(10):
  -2.0   1.0   0.0   0.0   0.0   0.0   0.0   0.0   0.0   0.0
   1.0  -2.0   1.0   0.0   0.0   0.0   0.0   0.0   0.0   0.0
   0.0   1.0  -2.0   1.0   0.0   0.0   0.0   0.0   0.0   0.0
@@ -65,7 +65,7 @@ FiniteDiff.finite_difference_jacobian!(output,f,x)
 output
 
 #=
-10×10 Array{Float64,2}:
+10×10 Matrix{Float64}:
  -2.0   1.0   0.0   0.0   0.0   0.0   0.0   0.0   0.0   0.0
   1.0  -2.0   1.0   0.0   0.0   0.0   0.0   0.0   0.0   0.0
   0.0   1.0  -2.0   1.0   0.0   0.0   0.0   0.0   0.0   0.0
@@ -100,23 +100,29 @@ etc. all work.
 
 Now let's exploit sparsity. If we knew the sparsity pattern we could write it
 down analytically as a sparse matrix, but let's assume we don't. Thus we can
-use [SparsityDetection.jl](https://github.com/JuliaDiffEq/SparsityDetection.jl)
+use [SparseConnectivityTracer.jl](https://github.com/adrhill/SparseConnectivityTracer.jl)
 to automatically get the sparsity pattern of the Jacobian as a sparse matrix:
 
 ```julia
-using SparsityDetection, SparseArrays
+using SparseConnectivityTracer, SparseArrays
 in = rand(10)
 out = similar(in)
-sparsity_pattern = sparsity!(f,out,in)
+
+detector = TracerSparsityDetector()
+sparsity_pattern = jacobian_sparsity(f,out,in,detector)
+
 sparsejac = Float64.(sparse(sparsity_pattern))
 ```
 
-Then we can use [SparseDiffTools.jl](https://github.com/JuliaDiffEq/SparseDiffTools.jl)
+Then we can use [SparseMatrixColorings.jl](https://github.com/gdalle/SparseMatrixColorings.jl)
 to get the color vector:
 
 ```julia
-using SparseDiffTools
-colors = matrix_colors(sparsejac)
+using SparseMatrixColorings
+coloring_prob = ColoringProblem(; structure = :nonsymmetric, partition = :column)
+coloring_alg = GreedyColoringAlgorithm(; decompression = :direct)
+coloring_result = coloring(sparsejac, coloring_prob, coloring_alg)
+colors = column_colors(coloring_result)
 ```
 
 Now we can do sparse differentiation by passing the color vector and the sparsity
@@ -169,8 +175,8 @@ we get the analytical solution to the optimal matrix colors for our structured
 Jacobian. Now we can use this in our differencing routines:
 
 ```julia
-tridiagcache = FiniteDiff.JacobianCache(x,colorvec=colors,sparsity=tridiagjac)
-FiniteDiff.finite_difference_jacobian!(tridiagjac,f,x,tridiagcache)
+tridiagcache = FiniteDiff.JacobianCache(x, colorvec=colors, sparsity=tridiagjac)
+FiniteDiff.finite_difference_jacobian!(tridiagjac, f, x, tridiagcache)
 ```
 
 It'll use a special iteration scheme dependent on the matrix type to accelerate
@@ -183,14 +189,16 @@ differential equations, with a function like:
 
 ```julia
 function pde(out, x)
-	x = reshape(x, 100, 100)
-	out = reshape(out, 100, 100)
-	for i in 1:100
-		for j in 1:100
-			out[i, j] = x[i, j] + x[max(i -1, 1), j] + x[min(i+1, size(x, 1)), j] +  x[i, max(j-1, 1)]  + x[i, min(j+1, size(x, 2))]
-		end
-	end
-	return vec(out)
+    x = reshape(x, 100, 100)
+    out = reshape(out, 100, 100)
+    m = size(x, 1)
+    n = size(x, 2)
+    for i in 1:100
+        for j in 1:100
+            out[i, j] = x[i, j] + x[max(i-1, 1), j] + x[min(i+1, m), j] +  x[i, max(j-1, 1)]  + x[i, min(j+1, n)]
+        end
+    end
+    return vec(out)
 end
 x = rand(10000)
 ```
